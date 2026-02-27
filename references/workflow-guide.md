@@ -251,6 +251,69 @@ DONE. No "I'm working on it" email was sent. Only the result.
    Continue with Section 4, Phase 2, STEP 1.
 ```
 
+## Worked Example 5 — Approval Gate: Data Collection → Processing
+
+**Situation**: The user asks to collect and analyze data about the German insurance market. The agent breaks this into two phases: collection (subtasks 1-5) and processing (subtasks 6-9). Subtask 6 has an approval gate because the user wants to verify that enough data was collected before processing starts.
+
+### What the agent does:
+
+```
+1. PLANNING — Create subtasks with a gate.
+
+   | # | Subtask | Status | Deliverable | Depends on | Gate |
+   |---|---------|--------|-------------|------------|------|
+   | 1 | Download Allianz annual reports 2018-2024 | pending | data/allianz/ | — | |
+   | 2 | Download Munich Re annual reports 2018-2024 | pending | data/munich-re/ | — | |
+   | 3 | Download ERGO annual reports 2018-2024 | pending | data/ergo/ | — | |
+   | 4 | Download HUK-Coburg annual reports 2018-2024 | pending | data/huk-coburg/ | — | |
+   | 5 | Download GDV statistical yearbook | pending | data/gdv/ | — | |
+   | 6 | Extract Allianz key metrics to CSV | pending | data/allianz-metrics.csv | 1 | yes |
+   | 7 | Extract Munich Re key metrics to CSV | pending | data/munich-re-metrics.csv | 2 | |
+   | 8 | Extract remaining insurers to CSV | pending | data/*.csv | 3,4 | |
+   | 9 | Merge all CSVs into master dataset | pending | data/market-overview.csv | 6,7,8 | |
+
+   Gate on subtask 6 means: after all collection subtasks (1-5) are done,
+   STOP and ask the user before starting the extraction phase.
+
+2. EXECUTION — Subtasks 1-5 run normally.
+   The agent downloads all reports, writing checkpoints after each.
+   After subtask 5 is done: "Subtasks: 5/9 done"
+
+3. GATE TRIGGERED — Subtask 6 has gate = "yes".
+   The agent reaches subtask 6 in Phase 2, STEP 1.
+   It sees gate = "yes" and STOPS.
+
+   Agent shows the user:
+
+     "Phase complete. Summary of work so far:
+      - Subtask 1: Download Allianz reports — done. Files: data/allianz/ (7 PDFs, 2018-2024)
+      - Subtask 2: Download Munich Re reports — done. Files: data/munich-re/ (7 PDFs)
+      - Subtask 3: Download ERGO reports — done. Files: data/ergo/ (7 PDFs)
+      - Subtask 4: Download HUK-Coburg reports — done. Files: data/huk-coburg/ (7 PDFs)
+      - Subtask 5: Download GDV yearbook — done. Files: data/gdv/ (1 PDF)
+      Total files collected: 29 PDFs across 5 sources
+
+      Next phase: Extract key metrics from reports into CSV files (subtasks 6-9)
+
+      Should I proceed with the extraction phase, or do you want me to
+      collect more data / make changes first?"
+
+4a. USER SAYS "proceed" → Agent continues with subtask 6. Normal execution.
+
+4b. USER SAYS "Also get Debeka and Gothaer reports" → This is a scope change.
+    Agent follows Section 10a:
+    - Adds subtask 5a: "Download Debeka reports" (new, pending)
+    - Adds subtask 5b: "Download Gothaer reports" (new, pending)
+    - Keeps gate on subtask 6
+    - Writes [SCOPE CHANGE] checkpoint
+    - Executes new subtasks 5a and 5b
+    - Hits the gate again → asks user again
+    - User says "proceed" → continues with subtask 6
+
+4c. USER SAYS "stop for now" → Agent saves state and ends session.
+    Next session: resumes, sees gate, asks user again.
+```
+
 ## Decision Tree — What To Do When Stuck
 
 ```
@@ -262,6 +325,12 @@ PROBLEM: A project has too many subtasks (>10).
   → Group related subtasks into phases.
   → Create 3-5 high-level subtasks, each representing a phase.
   → Within each subtask's checkpoint, track the detailed steps.
+
+PROBLEM: A project has distinct phases (e.g., collection → processing) and the user
+         should review the first phase before the second begins.
+  → Place an approval gate (gate = "yes") on the first subtask of the second phase.
+  → When the gate triggers, show a summary of all completed work and ask the user.
+  → See SKILL.md Section 4, Phase 2, STEP 1 for the full gate workflow.
 
 PROBLEM: A subtask is blocked.
   → Set subtask status to "blocked" in plan.md.
@@ -347,3 +416,9 @@ PROBLEM: Multiple todos are active and I don't know which to work on.
     Always show the impact analysis (which subtasks are affected and how) and WAIT
     for the user to confirm before editing plan.md. The user may disagree with
     your assessment of what needs to change.
+
+11. **Skipping an approval gate and starting the next phase without asking.**
+    When a subtask has gate = "yes", you MUST stop and show a summary before
+    continuing. The user might want to add more data sources, change scope, or
+    pause the project. Never assume the collected data is sufficient — let the
+    user decide.

@@ -156,12 +156,31 @@ STEP 3: Break the goal into subtasks.
     - A deliverable (what file or output it produces)
     - A status: "pending"
     - Dependencies (which subtask must be done first, if any)
+    - A gate flag: "yes" or leave empty
 
   Rules for good subtasks:
     - Each subtask must be completable in ONE session.
     - Each subtask must produce something concrete (a file, a dataset, a summary).
     - Order them by dependency: what must come first?
     - If you are unsure how to break it down, ask the user for guidance.
+
+  APPROVAL GATES — When to use them:
+    A gate means: "STOP here and ask the user for approval before continuing."
+    Place a gate on a subtask when ALL of these are true:
+      1. The subtasks BEFORE this one are a collection/research phase.
+      2. The subtasks AFTER this one are a processing/output phase.
+      3. The user might want to review collected data before processing begins.
+      4. Starting the next phase with incomplete data would waste work.
+
+    Set gate = "yes" on the FIRST subtask of the new phase — NOT on the last
+    subtask of the previous phase. The gate triggers BEFORE the subtask runs.
+
+    Example: data collection (subtasks 1-5) → data processing (subtasks 6-9)
+      → Set gate = "yes" on subtask 6.
+      → Agent will stop after subtask 5, show summary, ask user for approval.
+
+    When in doubt about whether to place a gate: place it.
+    It is better to ask once too many than to process incomplete data.
 
 STEP 4: Update TRACKER.md.
   Run: bash <skill-path>/scripts/todo.sh update <id> --status planning
@@ -180,6 +199,30 @@ STEP 1: Find the next subtask.
   Read DATA_DIR/projects/<project-id>/plan.md.
   Find the first subtask with status "pending".
   If no pending subtasks remain, go to Phase 3.
+
+  CHECK FOR APPROVAL GATE:
+  If the next pending subtask has gate = "yes":
+    a. STOP. Do NOT start the subtask yet.
+    b. Read all checkpoints written so far (checkpoint.md).
+    c. Compose a gate summary for the user:
+
+       "Phase complete. Summary of work so far:
+        - Subtask 1: <title> — done. Deliverable: <file/output>
+        - Subtask 2: <title> — done. Deliverable: <file/output>
+        - ...
+        Total files collected: <count or list>
+
+        Next phase: <title of gated subtask and subsequent subtasks>
+
+        Should I proceed with the next phase, or do you want me to
+        collect more data / make changes first?"
+
+    d. WAIT for user response.
+       - User says "proceed" / "go ahead" / "yes" → continue to STEP 2.
+       - User says "collect more" / "add X" → this is a scope change.
+         Follow Section 10a (Scope Change Workflow) to add subtasks.
+         After the scope change, come back to STEP 1.
+       - User says "stop" / "pause" → save state and end session.
 
 STEP 2: Start working.
   Update the subtask status to "in_progress" in plan.md.
@@ -751,3 +794,4 @@ Read these before every action:
 13. **Never invent a todo ID.** Always use the ID returned by the script (last line of output).
 14. **Keep checkpoint messages under 200 characters.** Always include files and blockers.
 15. **When multiple tasks compete for attention**, add all to TRACKER.md first, then ask the user which to start.
+16. **Never skip an approval gate.** If a subtask has gate = "yes", ALWAYS stop and ask the user before starting it.

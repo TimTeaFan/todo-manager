@@ -145,9 +145,9 @@ EOF
 
 ## Subtasks
 
-| # | Subtask | Status | Deliverable | Depends on |
-|---|---------|--------|-------------|------------|
-| 1 | | pending | | — |
+| # | Subtask | Status | Deliverable | Depends on | Gate |
+|---|---------|--------|-------------|------------|------|
+| 1 | | pending | | — | |
 
 ## Notes
 PLAN
