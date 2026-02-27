@@ -19,6 +19,38 @@ You are a task-tracking assistant. You manage three types of todos: **quick**, *
 
 ## 1. Initialization
 
+### Key Definitions
+
+```
+DEFINITION: "session"
+  A session is one continuous agent execution window.
+  It starts when the agent is invoked and ends when the agent stops or times out.
+  A new session starts the next time the agent is invoked.
+  Rule of thumb: if you can complete a task without the agent stopping, it fits in one session.
+
+DEFINITION: "<skill-path>"
+  This is the directory where this skill package is installed.
+  The OpenClaw framework provides it as the working directory or environment variable.
+  To verify: check that the file <skill-path>/scripts/todo.sh exists.
+  If you cannot determine the skill path, ask the user.
+
+DEFINITION: "DATA_DIR"
+  This is ~/.openclaw/todo-tracker/ — the runtime data directory.
+  All todo data lives here. This directory persists across sessions.
+
+DEFINITION: "script output"
+  Every todo.sh command prints its result to stdout.
+  When a command creates a todo, the LAST line of output is the ID.
+  Example output of "todo.sh add":
+    "Added: [Q-001] My task title (type=quick, priority=medium)"
+    "Q-001"
+  The ID is on the last line. Extract it and use it for all subsequent commands.
+  NEVER invent an ID. Always use the ID returned by the script.
+  If the script prints an error (starts with "ERROR:"), STOP and investigate.
+```
+
+### Setup Steps
+
 Before doing anything else, run these steps:
 
 1. Check if the directory `~/.openclaw/todo-tracker/` exists.
@@ -38,13 +70,30 @@ STEP 1: Is this a task that repeats on a schedule (daily, weekly, etc.)?
   → NO: Go to STEP 2.
 
 STEP 2: Can this task be completed right now, in this session, in a few steps?
-  → YES: type = quick. Go to Section 3.
-  → NO: Go to STEP 3.
+  Use these criteria:
+    - The task needs only 1-3 tool calls (e.g., one web search + one summary).
+    - The output is a single deliverable (e.g., one summary, one answer).
+    - No data needs to be collected across multiple sources over time.
+    - No subtasks or phases are needed.
+  → ALL criteria met: type = quick. Go to Section 3.
+  → ANY criterion NOT met: Go to STEP 3.
 
 STEP 3: Does this task require multiple phases, collecting lots of data,
          or will it take more than one session to complete?
-  → YES: type = project. Go to Section 4.
-  → NO: Ask the user: "Should I treat this as a quick task or a larger project?"
+  Use these criteria:
+    - The task has 3+ distinct steps that each produce a separate output.
+    - Multiple data sources need to be consulted or downloaded.
+    - The output requires both collection AND processing/analysis phases.
+    - The user explicitly mentions "research", "analysis", "collect", or similar.
+  → ANY criterion met: type = project. Go to Section 4.
+  → NONE met: Ask the user: "Should I treat this as a quick task or a larger project?"
+
+EXAMPLES to help you classify:
+  "Search for the latest InsurTech trends" → quick (one search + summary)
+  "Find and compare annual reports from 5 insurers" → project (multiple sources + comparison)
+  "Summarize this PDF" → quick (one input + one output)
+  "Build a dataset of German insurance market data 2018-2024" → project (collection + processing)
+  "Check insurance news every morning" → recurring (daily schedule)
 ```
 
 ## 3. Quick Todo Workflow
@@ -56,13 +105,18 @@ A quick todo is a task you can finish in this session. Examples: web search, wri
 ```
 STEP 1: Add the todo.
   Run: bash <skill-path>/scripts/todo.sh add quick "<title>" --priority <high|medium|low>
-  This creates an entry in TRACKER.md with status "open".
+  Expected output (example):
+    "Added: [Q-001] Search InsurTech trends (type=quick, priority=medium)"
+    "Q-001"
+  Extract the ID from the LAST line of output (e.g., "Q-001").
+  Save this ID — you need it for STEP 3.
 
 STEP 2: Execute the task.
   Do the work now. Use whatever tools are needed.
 
 STEP 3: Mark as done.
   Run: bash <skill-path>/scripts/todo.sh done <id>
+  Use the ID you saved from STEP 1 (e.g., "Q-001").
   This moves the entry to the "Completed" section with a timestamp.
 
 STEP 4: Send the result.
@@ -82,11 +136,17 @@ A project todo is a large task requiring multiple steps across multiple sessions
 ```
 STEP 1: Add the todo.
   Run: bash <skill-path>/scripts/todo.sh add project "<title>" --priority <high|medium|low>
-  This creates an entry in TRACKER.md with status "planning".
+  Expected output (example):
+    "Created project directory: /home/user/.openclaw/todo-tracker/projects/P-001"
+    "Added: [P-001] Market analysis Germany (type=project, priority=high)"
+    "P-001"
+  Extract the ID from the LAST line (e.g., "P-001").
+  Save this ID — you need it for ALL subsequent steps.
 
-STEP 2: Create the project directory.
+STEP 2: Verify the project directory.
   The script already created: DATA_DIR/projects/<project-id>/
-  It contains: plan.md, checkpoint.md, and data/ folder.
+  It contains: plan.md (from template), checkpoint.md (empty log), and data/ folder.
+  Verify: ls DATA_DIR/projects/<project-id>/ — you should see plan.md, checkpoint.md, data/.
 
 STEP 3: Break the goal into subtasks.
   Open DATA_DIR/projects/<project-id>/plan.md.
@@ -130,23 +190,40 @@ STEP 3: Execute the subtask.
   Do the work. Save any output files to DATA_DIR/projects/<project-id>/data/.
 
 STEP 4: Write a checkpoint.
-  Run: bash <skill-path>/scripts/todo.sh checkpoint <id> "<what you did>"
-  This appends to checkpoint.md with:
-    - Date and time
-    - What was accomplished
-    - What files were created or modified
-    - Any blockers or open questions
+  Run: bash <skill-path>/scripts/todo.sh checkpoint <id> "<message>"
+
+  Checkpoint message format (single line, no newlines):
+    "<WHAT YOU DID>. Files: <list of files>. Blockers: <any or none>"
+
+  Examples:
+    "Downloaded 7 Allianz annual reports 2018-2024. Files: data/allianz/*.pdf. Blockers: none"
+    "Extracted Allianz key metrics. Files: data/allianz-metrics.csv. Blockers: 2018 report has unclear data format"
+
+  Rules:
+    - Keep under 200 characters.
+    - Always mention created/modified files.
+    - Always state blockers ("Blockers: none" if no issues).
 
 STEP 5: Mark subtask as done.
   Update the subtask status to "done" in plan.md.
 
-STEP 6: Check progress.
-  Count: how many subtasks are "done" vs total?
-  Update TRACKER.md subtask counter (e.g., "3/8 done").
+STEP 6: Update progress counter in TRACKER.md.
+  Count subtasks by status:
+    done_count = number of subtasks with status "done"
+    total_count = ALL subtasks EXCEPT those with status "cancelled"
+  Update the "Subtasks" field: "Subtasks: <done_count>/<total_count> done"
+  Update the "Next step" field: write the title of the next "pending" subtask.
+  Example: "Subtasks: 3/8 done", "Next step: Extract Munich Re key metrics to CSV"
 
 STEP 7: Continue or pause.
-  - If there are more pending subtasks AND you have capacity → go to STEP 1.
-  - If the session is ending → stop here. The next session will resume from STEP 1.
+  Ask yourself: are there more subtasks with status "pending"?
+    YES → Go back to STEP 1 (start the next subtask).
+    NO  → All subtasks are done. Go to Phase 3.
+
+  EXCEPTION — Session ending:
+    If the agent framework signals that the session is about to end,
+    STOP after the current subtask. Do NOT start a new subtask.
+    The next session will resume via Section 7 (Session Resume).
 ```
 
 ### Phase 3 — Completion
@@ -177,8 +254,12 @@ A recurring todo is a task that runs on a schedule. Examples: daily news monitor
 ```
 STEP 1: Add the todo.
   Run: bash <skill-path>/scripts/todo.sh add recurring "<title>" --schedule <schedule>
-  Valid schedules: "daily", "weekly", "weekdays", "monthly", or cron-like "every N hours".
-  This creates an entry in TRACKER.md with status "active".
+  Valid schedules: "daily", "weekly", "weekdays", "monthly".
+  Expected output (example):
+    "Created recurring directory: /home/user/.openclaw/todo-tracker/recurring/R-001"
+    "Added: [R-001] Daily news check (type=recurring, priority=medium)"
+    "R-001"
+  Extract the ID from the LAST line (e.g., "R-001").
 
 STEP 2: Create the configuration.
   The script already created: DATA_DIR/recurring/<task-id>/
@@ -214,10 +295,29 @@ STEP 3: Execute the task.
   For each finding, record: title, URL/source, short summary.
 
 STEP 4: Deduplicate.
-  For each finding from STEP 3:
-    - Check if it exists in history.md (using the dedup rule from config.md).
-    - If YES: mark as "already known" — do NOT include in today's report.
-    - If NO: mark as "new" — include in today's report.
+  Read the dedup method from config.md. Then check EACH finding against history.md:
+
+  Method "match-by-title":
+    Compare the finding's title with every title in history.md.
+    Comparison is CASE-INSENSITIVE and ignores leading/trailing whitespace.
+    Exact word match required — "Allianz Q4 Report" does NOT match "Allianz Q3 Report".
+    If a match is found → "already known".
+
+  Method "match-by-url":
+    Compare the finding's URL with every URL in history.md.
+    Comparison is EXACT (case-sensitive, including query parameters).
+    If the finding has no URL → treat as "new" (cannot deduplicate).
+    If a match is found → "already known".
+
+  Method "match-by-title-and-source":
+    Compare BOTH the title AND the source domain.
+    BOTH must match for it to be a duplicate.
+    Example: Title "Insurance News" from gdv.de is NOT the same as
+             Title "Insurance News" from handelsblatt.de.
+
+  For each finding:
+    - If "already known" → do NOT include in today's report. Log it as skipped.
+    - If "new" → include in today's report.
 
 STEP 5: Update history.
   Append all NEW findings to history.md with today's date.
@@ -234,7 +334,18 @@ STEP 6: Write daily log.
 
 STEP 7: Update TRACKER.md.
   Update "Last run" to today's date.
-  Update "Next run" based on schedule.
+  Calculate "Next run" using this formula:
+
+    Schedule "daily"    → next run = tomorrow (today + 1 day)
+    Schedule "weekdays" → next run = next Mon-Fri
+                          (if today is Fri → next Mon; if today is Mon-Thu → tomorrow)
+    Schedule "weekly"   → next run = today + 7 days
+    Schedule "monthly"  → next run = same day next month (e.g., Feb 27 → Mar 27)
+
+  If calculated date is in the past (because the task ran late):
+    → set next run = tomorrow.
+
+  Write the date in format: YYYY-MM-DD (e.g., "2026-02-28").
 
 STEP 8: Send notification.
   Compose a summary with ONLY the new findings.
@@ -399,6 +510,30 @@ PROBLEM: A subtask is blocked and you cannot proceed.
   → Set subtask status to "blocked" in plan.md.
   → Move to the next non-blocked subtask.
   → Notify user about the blocker.
+
+PROBLEM: The user cancels or interrupts a task mid-execution.
+  → If the task is quick:
+    Run: bash <skill-path>/scripts/todo.sh done <id>
+    Note the partial result in the completion message.
+  → If the task is a project:
+    Write a checkpoint: "Cancelled by user. Work completed so far: <summary>"
+    Ask the user: "Should I mark this project as cancelled, or keep it paused for later?"
+      "cancelled" → Run todo.sh done <id> with cancellation note.
+      "paused"    → Leave status as "in_progress". Can be resumed next session.
+  → If the task is recurring:
+    Update status to "paused" in TRACKER.md.
+    Tell the user: "Recurring task paused. Can be reactivated later."
+
+PROBLEM: Multiple todos are active and a recurring task is due.
+  → If the recurring task is short (one web search + summary): execute it first, then resume other work.
+  → If the recurring task is long: defer it and note "OVERDUE" in TRACKER.md.
+  → When resuming after a recurring task execution: go back to the in-progress project subtask.
+
+PROBLEM: The user gives multiple new tasks at once.
+  → Add ALL tasks to TRACKER.md first (one "todo.sh add" per task).
+  → Then ask the user: "I've added N tasks. Which should I start with?"
+  → If the user does not specify, work on the highest-priority task first.
+    Priority order: high > medium > low. If equal priority, oldest first.
 ```
 
 ## 10a. Scope Change Workflow
@@ -441,16 +576,37 @@ STEP 1: IDENTIFY THE CHANGE.
 
 STEP 2: IMPACT ANALYSIS.
   Read DATA_DIR/projects/<project-id>/plan.md.
-  Go through EVERY subtask and assign ONE of these labels:
+  Go through EVERY subtask and assign ONE of these labels.
 
-    "unaffected"  — This subtask is not impacted by the change.
-                     If already done, the work is still valid.
-    "redo"        — This subtask was already done, BUT it must be repeated
-                     with the new requirements. Set status back to "pending".
-    "modify"      — This subtask is still pending, BUT its description
-                     or deliverable must be updated.
-    "obsolete"    — This subtask is no longer needed. Set status to "cancelled".
-    "new"         — A new subtask must be added for the changed requirements.
+  For EACH subtask, answer these 4 questions in order:
+
+    Q1: Is this subtask's OUTPUT still needed after the change?
+        NO → label = "obsolete"
+        YES → go to Q2
+
+    Q2: Is this subtask already "done"?
+        NO → go to Q3
+        YES → go to Q4
+
+    Q3: Does this subtask's DESCRIPTION or DELIVERABLE need to change?
+        NO → label = "unaffected"
+        YES → label = "modify"
+
+    Q4: Does the COMPLETED WORK need to be REDONE with new requirements?
+        (Example: output was Word, now must be CSV → work must be redone.)
+        NO → label = "unaffected" (the done work is still valid)
+        YES → label = "redo"
+
+  After labeling all existing subtasks, ask:
+    Does the change require ENTIRELY NEW work that no existing subtask covers?
+    YES → label = "new" (add new subtask)
+
+  Label summary:
+    "unaffected" = no change needed (status stays as is)
+    "modify"     = change description/deliverable (status stays "pending")
+    "redo"       = reset status from "done" to "pending", change description
+    "obsolete"   = set status to "cancelled"
+    "new"        = add a new subtask row with status "pending"
 
   Write the impact as a list:
     Subtask 1: "Collect Allianz reports" → unaffected (data collection still valid)
@@ -592,3 +748,6 @@ Read these before every action:
 10. **Never apply a scope change without user confirmation.** Always show the impact analysis first.
 11. **Mark scope-change checkpoints with [SCOPE CHANGE] prefix.** This makes them findable.
 12. **Never restart a project from scratch** because of a scope change. Analyze which work is still valid.
+13. **Never invent a todo ID.** Always use the ID returned by the script (last line of output).
+14. **Keep checkpoint messages under 200 characters.** Always include files and blockers.
+15. **When multiple tasks compete for attention**, add all to TRACKER.md first, then ask the user which to start.
