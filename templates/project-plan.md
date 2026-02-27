@@ -21,7 +21,7 @@
 | 2 | | pending | | — |
 | 3 | | pending | | — |
 
-**Status values**: pending, in_progress, done, blocked
+**Status values**: pending, in_progress, done, blocked, cancelled
 
 ## Blockers
 

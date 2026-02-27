@@ -168,6 +168,89 @@ DONE. No "I'm working on it" email was sent. Only the result.
       ..."
 ```
 
+## Worked Example 4 — Scope Change: Deliverable Format Change
+
+**Situation**: The agent is working on project P-001 "Competitive analysis: German insurance market". It has completed 3 of 8 subtasks (downloaded annual reports for Allianz, Munich Re, ERGO). Subtasks 6-8 are about writing Word document summaries for each insurer.
+
+**User says**: "I changed my mind. Instead of Word summaries, I want you to extract the key metrics (customer count, premium income, combined ratio) into CSV files. One CSV per insurer."
+
+### What the agent does:
+
+```
+1. IDENTIFY THE CHANGE.
+   Category: deliverable-format
+   Summary: "User wants CSV files with extracted key metrics instead of Word document summaries."
+
+2. IMPACT ANALYSIS.
+   Read projects/P-001/plan.md. Go through every subtask:
+
+   Subtask 1: "Download Allianz annual reports 2018-2024" → unaffected (done, data still valid)
+   Subtask 2: "Download Munich Re annual reports 2018-2024" → unaffected (done, data still valid)
+   Subtask 3: "Download ERGO annual reports 2018-2024" → unaffected (done, data still valid)
+   Subtask 4: "Download HUK-Coburg annual reports 2018-2024" → unaffected (pending, unchanged)
+   Subtask 5: "Download GDV statistical yearbook" → unaffected (pending, unchanged)
+   Subtask 6: "Write Allianz summary in Word" → redo (now: extract key metrics to CSV)
+   Subtask 7: "Write Munich Re summary in Word" → modify (change deliverable to CSV)
+   Subtask 8: "Write final comparison report in Word" → modify (change to CSV merge + summary)
+   NEW: "Merge all per-insurer CSVs into master dataset"
+
+3. CONFIRM WITH USER.
+   Show the user:
+     "Scope change: CSV with key metrics instead of Word summaries.
+
+     Impact on subtasks:
+     - Subtask 1: Download Allianz reports → unaffected (already done)
+     - Subtask 2: Download Munich Re reports → unaffected (already done)
+     - Subtask 3: Download ERGO reports → unaffected (already done)
+     - Subtask 4: Download HUK-Coburg reports → unaffected
+     - Subtask 5: Download GDV yearbook → unaffected
+     - Subtask 6: Write Allianz Word summary → redo as 'Extract Allianz metrics to CSV'
+     - Subtask 7: Write Munich Re Word summary → modify to 'Extract Munich Re metrics to CSV'
+     - Subtask 8: Write comparison report → modify to 'Extract remaining insurers + merge CSVs'
+     - NEW subtask 9: Merge all CSVs into master dataset
+
+     Shall I update the plan accordingly?"
+
+   User confirms: "Yes, go ahead."
+
+4. UPDATE plan.md.
+   The subtask table now looks like:
+
+   | # | Subtask | Status | Deliverable | Depends on |
+   |---|---------|--------|-------------|------------|
+   | 1 | Download Allianz annual reports 2018-2024 | done | data/allianz/ | — |
+   | 2 | Download Munich Re annual reports 2018-2024 | done | data/munich-re/ | — |
+   | 3 | Download ERGO annual reports 2018-2024 | done | data/ergo/ | — |
+   | 4 | Download HUK-Coburg annual reports 2018-2024 | pending | data/huk-coburg/ | — |
+   | 5 | Download GDV statistical yearbook | pending | data/gdv/ | — |
+   | 6 | Extract Allianz key metrics to CSV | pending | data/allianz-metrics.csv | 1 |
+   | 7 | Extract Munich Re key metrics to CSV | pending | data/munich-re-metrics.csv | 2 |
+   | 8 | Extract ERGO + HUK-Coburg key metrics to CSV | pending | data/ergo-metrics.csv, data/huk-metrics.csv | 3,4 |
+   | 9 | Merge all CSVs into master dataset | pending | data/market-overview.csv | 6,7,8 |
+
+   Note: Subtask 6 was "done" but set back to "pending" because the deliverable changed.
+   Old subtask 8 (Word comparison report) was modified, not deleted.
+
+5. UPDATE TRACKER.md.
+   Before: "Subtasks: 3/8 done"
+   After: "Subtasks: 2/9 done" (subtask 6 was reset to pending, subtask 9 is new)
+   Next step: "Download HUK-Coburg annual reports"
+
+6. WRITE SCOPE-CHANGE CHECKPOINT.
+   Run: bash <skill-path>/scripts/todo.sh checkpoint P-001 "[SCOPE CHANGE] User requested CSV ..."
+
+   Checkpoint content:
+     "[SCOPE CHANGE] User requested CSV output with key metrics (customer count,
+     premium income, combined ratio) instead of Word document summaries.
+     Subtasks 6-8 changed from Word writing to CSV extraction.
+     Added subtask 9 (merge CSVs). Subtask 6 reset from done to pending.
+     New plan: 2/9 done."
+
+7. RESUME WORK.
+   Next pending subtask: #4 (Download HUK-Coburg reports).
+   Continue with Section 4, Phase 2, STEP 1.
+```
+
 ## Decision Tree — What To Do When Stuck
 
 ```
@@ -203,7 +286,24 @@ PROBLEM: I resumed a session but the TRACKER.md seems outdated.
 PROBLEM: The user changed their mind about a task.
   → If they want to cancel: run todo.sh done <id> and note "Cancelled by user" in the result.
   → If they want to change the type: complete the old todo, create a new one of the correct type.
-  → If they want to modify the scope: update plan.md or config.md, add a checkpoint.
+  → If they want to modify the scope: follow the Scope Change Workflow (SKILL.md Section 10a).
+
+PROBLEM: The user changes requirements mid-project.
+  → Do NOT start over from scratch.
+  → Do NOT ignore the change and keep working on the old plan.
+  → Follow SKILL.md Section 10a (Scope Change Workflow):
+    1. Write down in one sentence what changed.
+    2. Go through EVERY subtask: unaffected / redo / modify / obsolete / new?
+    3. Show the user the impact analysis. WAIT for confirmation.
+    4. Update plan.md (change statuses, descriptions, add new subtasks).
+    5. Write a [SCOPE CHANGE] checkpoint.
+    6. Resume work with the updated plan.
+
+PROBLEM: A quick task turns out to be too big for one session.
+  → Follow SKILL.md Section 10a, Path C (Quick → Project Escalation).
+  → Mark quick todo as done ("Escalated to project").
+  → Create a new project todo with the same title.
+  → Transfer already-completed work as the first checkpoint.
 
 PROBLEM: Multiple todos are active and I don't know which to work on.
   → Run: bash <skill-path>/scripts/todo.sh next
@@ -237,3 +337,13 @@ PROBLEM: Multiple todos are active and I don't know which to work on.
 
 8. **Not cleaning up old history entries.**
    Remove findings older than 30 days from history.md to keep it manageable.
+
+9. **Starting a project from scratch after a scope change.**
+   When the user changes requirements, do NOT throw away completed work. Analyze
+   which subtasks are still valid. Often data-collection subtasks remain useful —
+   only the processing/output subtasks need to change.
+
+10. **Applying a scope change without user confirmation.**
+    Always show the impact analysis (which subtasks are affected and how) and WAIT
+    for the user to confirm before editing plan.md. The user may disagree with
+    your assessment of what needs to change.

@@ -401,6 +401,181 @@ PROBLEM: A subtask is blocked and you cannot proceed.
   → Notify user about the blocker.
 ```
 
+## 10a. Scope Change Workflow
+
+When the user changes requirements for an existing todo, follow this section.
+A scope change is NOT a new task. It modifies an existing todo.
+
+Examples of scope changes:
+- "I want CSV files, not a Word document."
+- "Also include data from Swiss insurers."
+- "Change the schedule from daily to weekly."
+- "Add two more companies to the analysis."
+- "Actually, I only need the last 3 years, not 7."
+
+### Recognizing a Scope Change
+
+```
+When the user says something about an EXISTING todo, ask yourself:
+  - Is the user giving NEW instructions for a todo that already exists?
+  - Is the user changing the deliverable, the sources, the scope, or the format?
+  - Is the user NOT asking for a completely different task?
+
+If YES to any of these → this is a scope change. Follow the steps below.
+If the user wants a completely different task → create a new todo instead.
+If you are unsure → ask the user: "Should I update the existing task or create a new one?"
+```
+
+### Path A — Project Scope Change
+
+This is the most common case. The user changes requirements for a project todo.
+
+```
+STEP 1: IDENTIFY THE CHANGE.
+  Write down in one sentence what changed. Use one of these categories:
+    - "deliverable-format": The output format changed (e.g., Word → CSV).
+    - "sources": The data sources changed (e.g., add Swiss insurers).
+    - "scope-reduction": The scope got smaller (e.g., 7 years → 3 years).
+    - "scope-expansion": The scope got larger (e.g., add two more companies).
+    - "goal": The fundamental goal changed (e.g., competitive analysis → regulatory overview).
+
+STEP 2: IMPACT ANALYSIS.
+  Read DATA_DIR/projects/<project-id>/plan.md.
+  Go through EVERY subtask and assign ONE of these labels:
+
+    "unaffected"  — This subtask is not impacted by the change.
+                     If already done, the work is still valid.
+    "redo"        — This subtask was already done, BUT it must be repeated
+                     with the new requirements. Set status back to "pending".
+    "modify"      — This subtask is still pending, BUT its description
+                     or deliverable must be updated.
+    "obsolete"    — This subtask is no longer needed. Set status to "cancelled".
+    "new"         — A new subtask must be added for the changed requirements.
+
+  Write the impact as a list:
+    Subtask 1: "Collect Allianz reports" → unaffected (data collection still valid)
+    Subtask 2: "Collect Munich Re reports" → unaffected
+    Subtask 6: "Write Allianz summary in Word" → redo (now: extract to CSV)
+    Subtask 7: "Write Munich Re summary in Word" → modify (change deliverable to CSV)
+    NEW: "Merge all CSVs into master dataset" → new subtask
+
+STEP 3: CONFIRM WITH USER.
+  Show the user the impact analysis. Use this exact format:
+
+    "Scope change: <one-sentence description of what changed>
+
+    Impact on subtasks:
+    - Subtask 1: <title> → unaffected
+    - Subtask 2: <title> → unaffected
+    - Subtask 6: <title> → redo (reason: <why>)
+    - Subtask 7: <title> → modify (change: <what changes>)
+    - NEW subtask: <title>
+
+    Shall I update the plan accordingly?"
+
+  WAIT for the user to confirm. Do NOT proceed without confirmation.
+
+STEP 4: UPDATE plan.md.
+  After user confirms, edit plan.md:
+    a. Subtasks labeled "redo":
+       - Change status from "done" to "pending".
+       - Update the description and deliverable to match new requirements.
+    b. Subtasks labeled "modify":
+       - Update the description and deliverable. Keep status as "pending".
+    c. Subtasks labeled "obsolete":
+       - Change status to "cancelled". Do NOT delete the row.
+    d. New subtasks:
+       - Add new rows at the end of the table with status "pending".
+    e. Subtasks labeled "unaffected":
+       - Do not change anything.
+
+STEP 5: UPDATE TRACKER.md.
+  Recalculate the subtask counter:
+    - Count only subtasks with status "done" (not cancelled).
+    - Count total as all subtasks EXCEPT "cancelled".
+    - Example: 3 done, 2 cancelled, 5 pending → "3/10 done" becomes "1/8 done"
+      (if 2 of the 3 done ones were set to "redo").
+  Update the "Next step" field to reflect the new next subtask.
+
+STEP 6: WRITE SCOPE-CHANGE CHECKPOINT.
+  Run: bash <skill-path>/scripts/todo.sh checkpoint <id> "[SCOPE CHANGE] <description>"
+
+  The checkpoint message MUST start with [SCOPE CHANGE] so it is easy to find later.
+  Include:
+    - What the user requested
+    - Which subtasks were affected and how
+    - New subtask count
+
+  Example:
+    "[SCOPE CHANGE] User requested CSV output instead of Word documents.
+     Subtasks 6-8 changed from Word summaries to CSV extraction.
+     Added subtask 11: merge all CSVs. New plan: 3/11 done."
+
+STEP 7: RESUME WORK.
+  Go back to Section 4, Phase 2, STEP 1 (find the next pending subtask).
+  Continue working with the updated plan.
+```
+
+### Path B — Recurring Task Scope Change
+
+```
+STEP 1: IDENTIFY WHAT CHANGED.
+  One of:
+    - "schedule": The frequency changed (e.g., daily → weekly).
+    - "sources": The source list changed (e.g., add a new website).
+    - "instructions": The task instructions changed.
+    - "dedup-rules": The deduplication method changed.
+    - "notification-format": The output format changed.
+
+STEP 2: UPDATE config.md.
+  Open DATA_DIR/recurring/<task-id>/config.md.
+  Edit ONLY the section that changed. Do not touch other sections.
+
+STEP 3: HANDLE SIDE EFFECTS.
+  - If "schedule" changed:
+    Update TRACKER.md "Next run" based on the new schedule.
+  - If "sources" changed:
+    No side effects. New sources will be checked on next run.
+  - If "dedup-rules" changed:
+    Consider whether history.md should be cleared. If the dedup method changed
+    fundamentally (e.g., from match-by-url to match-by-title), some old entries
+    may cause false dedup matches. Ask the user: "Should I clear the history
+    to start fresh with the new dedup rules, or keep existing history?"
+
+STEP 4: WRITE CHECKPOINT.
+  Add a note to DATA_DIR/recurring/<task-id>/history.md:
+    "--- [SCOPE CHANGE] <date> ---
+     <what changed>"
+
+STEP 5: CONFIRM.
+  Tell the user: "Updated recurring task '<title>'. Change: <what changed>.
+  Next run: <date>."
+```
+
+### Path C — Quick Todo Escalation to Project
+
+When a quick todo turns out to be too large for one session:
+
+```
+STEP 1: Mark the quick todo as done.
+  Run: bash <skill-path>/scripts/todo.sh done <quick-id>
+  The result note should say: "Escalated to project — task too large for single session."
+
+STEP 2: Create a new project todo.
+  Run: bash <skill-path>/scripts/todo.sh add project "<same title>" --priority <same priority>
+
+STEP 3: Transfer completed work.
+  Write the first checkpoint for the new project:
+    "[ESCALATED FROM <quick-id>] Work already completed: <summary of what was done>"
+
+STEP 4: Create the subtask plan.
+  Follow Section 4, Phase 1, STEP 3 (break into subtasks).
+  Mark any work already completed as subtask status "done".
+
+STEP 5: Continue.
+  Follow Section 4, Phase 2 (execution) with the remaining subtasks.
+```
+
 ## 11. Important Reminders
 
 Read these before every action:
@@ -414,3 +589,6 @@ Read these before every action:
 7. **One subtask at a time** for projects. Complete one before starting the next.
 8. **Keep history.md clean** for recurring tasks. Remove entries older than 30 days.
 9. **If you are unsure, ask the user.** Do not assume.
+10. **Never apply a scope change without user confirmation.** Always show the impact analysis first.
+11. **Mark scope-change checkpoints with [SCOPE CHANGE] prefix.** This makes them findable.
+12. **Never restart a project from scratch** because of a scope change. Analyze which work is still valid.
